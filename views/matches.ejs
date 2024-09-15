@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Match list</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <div class="container mt-5">
+    <h1 class="mb-4">
+      <a href="/matches/add-match" class="btn btn-primary">Add match</a>
+    </h1>
+
+    <!-- Dropdown list with filters  -->
+    <form method="GET" action="/matches" class="mb-4">
+      <div class="mb-3">
+        <label for="status" class="form-label">Filter by status:</label>
+        <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+          <option value="">All</option>
+          <option value="PLANNED" <%= statusFilter === 'PLANNED' ? 'selected' : '' %>>Planned</option>
+          <option value="IN_PROGRESS" <%= statusFilter === 'IN_PROGRESS' ? 'selected' : '' %>>In Progress</option>
+          <option value="FINISHED" <%= statusFilter === 'FINISHED' ? 'selected' : '' %>>Finished</option>
+        </select>
+      </div>
+    </form>
+
+    <h1 class="mb-4 text-center">Match list</h1>
+    
+    <!-- Match list  -->
+    <ul id="matches-list" class="list-group">
+      <% matches.forEach(function(match) { 
+        const matchDate = new Date(match.date);
+        const isoDate = matchDate.toISOString();
+        const formattedDate = isoDate;
+      %>
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>
+            <strong><%= match.teamA_name %></strong> vs <strong><%= match.teamB_name %></strong> - <%= formattedDate %> - <%= match.status %> - <%= match.result %>
+          </span>
+          <div>
+            <% if (match.status !== 'FINISHED') { %>
+              <form action="/details" method="GET" class="d-inline">
+                <input type="hidden" name="id" value="<%= match.id %>">
+                <button type="submit" class="btn btn-info btn-sm">Details</button>
+              </form>
+            <% } else { %>
+              <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('<%= match.teamA_name %>', '<%= match.teamB_name %>', '<%= JSON.stringify(match.resultDetailed ? match.resultDetailed.resD : []) %>', '<%= match.result %>', '<%= isoDate %>')">Copy to Clipboard</button>
+            <% } %>
+            <form action="/matches/delete" method="POST" class="d-inline ms-2">
+              <input type="hidden" name="id" value="<%= match.id %>">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </div>
+        </li>
+      <% }); %>
+    </ul>
+  </div>
+
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io.connect();
+
+    socket.on('match-updated', () => {
+      location.reload();
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Rozłączono z serwerem WebSocket');
+    });
+
+    async function copyToClipboard(teamA, teamB, resultDetailed, totalResult, matchDate) {
+      try {
+        //Spliting data from resultDetailed into 2 sets 
+        const resD = JSON.parse(resultDetailed);
+        const teamAScores = resD.map(set => set.split(':')[0]);
+        const teamBScores = resD.map(set => set.split(':')[1]);
+
+        const numberOfSets = resD.length;
+
+        //Creating header S1 | S2 etc.
+        const header = Array.from({ length: numberOfSets }, (_, i) => `S${i + 1}`).join(' | ') + ' | Total';
+
+        //Spliting string of result 
+        const totalA = totalResult.split(':')[0];
+        const totalB = totalResult.split(':')[1];
+
+
+        //Checking longest teamname
+        const teamALength = teamA.length;
+        const teamBLength = teamB.length;
+        const maxTeamLength = Math.max(teamALength, teamBLength);
+
+        //Spaces for correct placment of header
+        const paddingSpaces = ' '.repeat(maxTeamLength);
+
+        //Creating string to copy
+        const formattedDetails = `
+        ${paddingSpaces}${header}
+        ${teamA.padEnd(maxTeamLength, ' ')} ${teamAScores.join(' | ')} | ${totalA}
+        ${teamB.padEnd(maxTeamLength, ' ')} ${teamBScores.join(' | ')} | ${totalB}
+        ${matchDate}`;
+
+
+        //Coping string into clipboard
+        await navigator.clipboard.writeText(formattedDetails).then(() => {
+          alert('Match details copied to clipboard!');
+        }).catch(err => {
+          console.error('Error copying match details: ', err);
+          alert('Failed to copy match details. Please try again.');
+        });
+      } catch (error) {
+        console.error('Error processing match details: ', error);
+        alert('Failed to process match details. Please try again.');
+      }
+    }
+  </script>
+</body>
+</html>
